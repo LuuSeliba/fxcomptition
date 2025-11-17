@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useCountdown } from '../hooks/useCountdown';
@@ -48,7 +47,7 @@ const FAQItem: React.FC<{ question: string; answer: React.ReactNode }> = ({ ques
 const HomePage: React.FC = () => {
     const { spotsFilled, totalSpots } = useCompetition();
 
-    const competitionStartDate = "2025-11-29T00:00:00";
+    const competitionStartDate = "2025-11-30T00:00:00";
     const faqs = [
         {
             q: "How does the competition work?",

@@ -1,8 +1,8 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
 import { useCompetition } from '../context/CompetitionContext';
-import { ChartBarIcon, UsersIcon, CashIcon, CheckCircleIcon, XCircleIcon, EyeIcon, EyeOffIcon, ShieldCheckIcon } from '../components/icons';
+import { ChartBarIcon, UsersIcon, CashIcon, CheckCircleIcon, XCircleIcon, TrashIcon, EyeIcon, EyeOffIcon, ShieldCheckIcon, PlusIcon, UserIcon, MailIcon, PhoneIcon, HashtagIcon, LockIcon, ChevronDownIcon, XIcon } from '../components/icons';
 import type { LeaderboardEntry, User } from '../types';
+import InputField from '../components/InputField';
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; }> = ({ title, value, icon }) => (
     <div className="bg-gray-800/50 p-6 rounded-xl flex items-center gap-4 border border-gray-700 hover:bg-gray-700/50 transition-colors duration-300">
@@ -18,11 +18,26 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
 
 
 const AdminDashboardPage: React.FC = () => {
-    const { participants, leaderboard } = useCompetition();
+    const { participants, leaderboard, updateParticipant, registerParticipant } = useCompetition();
     
     const [localLeaderboard, setLocalLeaderboard] = useState<LeaderboardEntry[]>([]);
+    const [leaderboardMessage, setLeaderboardMessage] = useState('');
     const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
     const [participantFilter, setParticipantFilter] = useState('all');
+
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [addFormState, setAddFormState] = useState({
+        username: '',
+        fullName: '',
+        email: '',
+        phone: '',
+        accountNumber: '',
+        investorPassword: '',
+        tradingPlatform: '',
+    });
+    const [addFormStatus, setAddFormStatus] = useState<'idle' | 'submitting' | 'error'>('idle');
+    const [addFormError, setAddFormError] = useState('');
+    const [showAddFormInvestorPassword, setShowAddFormInvestorPassword] = useState(false);
     
     const paidParticipants = participants.filter(p => p.paid).length;
     const pendingVerification = participants.filter(p => !p.verified).length;
@@ -39,6 +54,69 @@ const AdminDashboardPage: React.FC = () => {
     useEffect(() => {
         setLocalLeaderboard([...leaderboard].sort((a,b) => a.rank - b.rank));
     }, [leaderboard]);
+    
+    const handleLeaderboardChange = (index: number, field: 'name' | 'gain', value: string | number) => {
+        const updated = [...localLeaderboard];
+        if (field === 'gain') {
+            const gainValue = parseFloat(String(value));
+            updated[index] = { ...updated[index], [field]: isNaN(gainValue) ? 0 : gainValue };
+        } else {
+            updated[index] = { ...updated[index], [field]: String(value) };
+        }
+        setLocalLeaderboard(updated);
+    };
+
+    const handleLeaderboardSave = async () => {
+        setLeaderboardMessage('Saving...');
+        try {
+            const updatePromises = localLeaderboard
+                .map(entry => {
+                    const original = leaderboard.find(l => l.id === entry.id);
+                    if (!original) return null;
+
+                    const updates: Partial<User> = {};
+                    let hasChanges = false;
+                    
+                    if (original.name !== entry.name) {
+                        updates.username = entry.name;
+                        hasChanges = true;
+                    }
+
+                    if (original.gain !== entry.gain) {
+                        updates.gain = entry.gain;
+                        hasChanges = true;
+                    }
+
+                    if (hasChanges) {
+                        return updateParticipant(original.name, updates);
+                    }
+                    return null;
+                })
+                .filter((p): p is Promise<boolean> => p !== null);
+
+            if (updatePromises.length > 0) {
+                await Promise.all(updatePromises);
+                setLeaderboardMessage('Leaderboard updated successfully!');
+            } else {
+                setLeaderboardMessage('No changes to save.');
+            }
+
+        } catch (error) {
+            console.error("Error updating leaderboard: ", error);
+            setLeaderboardMessage('Error saving leaderboard.');
+        } finally {
+             setTimeout(() => setLeaderboardMessage(''), 3000);
+        }
+    };
+    
+    const handleTogglePayment = (user: User) => {
+      updateParticipant(user.username, { paid: !user.paid });
+    };
+
+    const handleToggleVerification = (user: User) => {
+      updateParticipant(user.username, { verified: !user.verified });
+    };
+
 
     const handleToggleReveal = (userId: string) => {
         if (!revealedPasswords[userId]) {
@@ -50,6 +128,41 @@ const AdminDashboardPage: React.FC = () => {
             }
         } else {
              setRevealedPasswords(prev => ({ ...prev, [userId]: false }));
+        }
+    };
+
+    const handleAddFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setAddFormState(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleAddParticipantSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        setAddFormError('');
+        setAddFormStatus('submitting');
+        
+        if (Object.values(addFormState).some(value => value === '')) {
+            setAddFormError('All fields are required.');
+            setAddFormStatus('error');
+            return;
+        }
+
+        const success = await registerParticipant(addFormState);
+        if (success) {
+            setIsAddModalOpen(false);
+            setAddFormState({
+                username: '',
+                fullName: '',
+                email: '',
+                phone: '',
+                accountNumber: '',
+                investorPassword: '',
+                tradingPlatform: '',
+            });
+            setAddFormStatus('idle');
+        } else {
+            setAddFormError('Failed to add participant. Username or email may already exist.');
+            setAddFormStatus('error');
         }
     };
     
@@ -79,7 +192,7 @@ const AdminDashboardPage: React.FC = () => {
                     {/* Leaderboard Editor */}
                     <div className="bg-gray-800/80 backdrop-blur-sm border border-gray-700 rounded-xl shadow-2xl p-6">
                         <h2 className="text-2xl font-bold text-white mb-2">Manage Leaderboard Gains</h2>
-                        <p className="text-sm text-gray-400 mb-4">View gains below. To edit, modify the data in the source code.</p>
+                        <p className="text-sm text-gray-400 mb-4">Edit gains below. Ranks are automatically calculated based on paid & verified users.</p>
                         <div className="overflow-x-auto">
                             <table className="min-w-full">
                                 <thead className="bg-gray-700/50">
@@ -90,14 +203,14 @@ const AdminDashboardPage: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {localLeaderboard.map((entry) => (
-                                        <tr key={entry.id} className="border-b border-gray-700">
-                                            <td className="px-4 py-2 font-bold text-gray-400">{entry.rank}</td>
+                                    {localLeaderboard.map((entry, index) => (
+                                        <tr key={entry.id || index} className="border-b border-gray-700">
+                                            <td className="px-4 py-2 font-bold text-gray-400">{entry.rank || '...'}</td>
                                             <td className="px-4 py-2">
-                                                <input type="text" value={entry.name} readOnly className="w-full bg-gray-800 text-gray-300 p-1 rounded-md border border-transparent cursor-not-allowed"/>
+                                                <input type="text" value={entry.name} onChange={(e) => handleLeaderboardChange(index, 'name', e.target.value)} className="w-full bg-gray-700 p-1 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
                                             </td>
                                             <td className="px-4 py-2">
-                                                <input type="number" step="0.01" value={entry.gain} readOnly className="w-24 bg-gray-700 p-1 rounded-md border border-gray-600 cursor-not-allowed"/>
+                                                <input type="number" step="0.01" value={entry.gain} onChange={(e) => handleLeaderboardChange(index, 'gain', e.target.value)} className="w-24 bg-gray-700 p-1 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
                                             </td>
                                         </tr>
                                     ))}
@@ -105,9 +218,16 @@ const AdminDashboardPage: React.FC = () => {
                             </table>
                         </div>
                          <div className="flex items-center justify-end mt-4">
-                            <button disabled className="bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition cursor-not-allowed">
-                                Save Gains (Disabled)
-                            </button>
+                            <div className="flex items-center gap-4">
+                                {leaderboardMessage && (
+                                    <span className="text-green-400 text-sm flex items-center gap-2">
+                                        <CheckCircleIcon className="w-5 h-5" /> {leaderboardMessage}
+                                    </span>
+                                )}
+                                <button onClick={handleLeaderboardSave} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
+                                    Save Changes
+                                </button>
+                            </div>
                         </div>
                     </div>
                      {/* Registered Participants */}
@@ -120,6 +240,12 @@ const AdminDashboardPage: React.FC = () => {
                               <FilterButton filter="unpaid" label="Unpaid" />
                               <FilterButton filter="verified" label="Verified" />
                               <FilterButton filter="unverified" label="Unverified" />
+                               <button
+                                    onClick={() => setIsAddModalOpen(true)}
+                                    className="flex items-center gap-2 px-3 py-1 text-sm font-medium rounded-md transition bg-green-600 text-white hover:bg-green-700"
+                                >
+                                    <PlusIcon className="w-4 h-4" /> Add Participant
+                                </button>
                             </div>
                         </div>
                          <div className="overflow-x-auto">
@@ -169,14 +295,22 @@ const AdminDashboardPage: React.FC = () => {
                                                 <td className="px-4 py-3">
                                                     <div className="flex flex-col lg:flex-row gap-2">
                                                       <button
-                                                          disabled
-                                                          className="text-xs font-bold py-1 px-3 rounded-md transition w-full bg-gray-600 text-white cursor-not-allowed"
+                                                          onClick={() => handleTogglePayment(user)}
+                                                          className={`text-xs font-bold py-1 px-3 rounded-md transition w-full ${
+                                                              user.paid
+                                                                  ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                                                                  : 'bg-green-600 hover:bg-green-700 text-white'
+                                                          }`}
                                                       >
                                                           {user.paid ? 'Undo Pay' : 'Mark Paid'}
                                                       </button>
                                                        <button
-                                                          disabled
-                                                          className="text-xs font-bold py-1 px-3 rounded-md transition w-full bg-gray-600 text-white cursor-not-allowed"
+                                                          onClick={() => handleToggleVerification(user)}
+                                                          className={`text-xs font-bold py-1 px-3 rounded-md transition w-full ${
+                                                              user.verified
+                                                                  ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                                                                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                                          }`}
                                                       >
                                                           {user.verified ? 'Un-Verify' : 'Verify'}
                                                       </button>
@@ -197,6 +331,61 @@ const AdminDashboardPage: React.FC = () => {
                     </div>
                 </div>
             </div>
+             {isAddModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-lg max-h-full overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-2xl font-bold text-white">Add New Participant</h2>
+                            <button onClick={() => setIsAddModalOpen(false)} className="text-gray-400 hover:text-white">
+                                <XIcon className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleAddParticipantSubmit} className="space-y-4">
+                            <InputField name="username" icon={<UserIcon className="h-5 w-5 text-gray-400"/>} type="text" placeholder="Username" value={addFormState.username} onChange={handleAddFormChange} />
+                            <InputField name="fullName" icon={<UserIcon className="h-5 w-5 text-gray-400"/>} type="text" placeholder="Full Name (private)" value={addFormState.fullName} onChange={handleAddFormChange} />
+                            <InputField name="email" icon={<MailIcon className="h-5 w-5 text-gray-400"/>} type="email" placeholder="Email address" value={addFormState.email} onChange={handleAddFormChange} />
+                            <InputField name="phone" icon={<PhoneIcon className="h-5 w-5 text-gray-400"/>} type="tel" placeholder="Phone Number (e.g. +27...)" value={addFormState.phone} onChange={handleAddFormChange} />
+                            <InputField name="accountNumber" icon={<HashtagIcon className="h-5 w-5 text-gray-400"/>} type="text" placeholder="Trading Account Number" value={addFormState.accountNumber} onChange={handleAddFormChange} />
+                            <InputField
+                                name="investorPassword"
+                                icon={<LockIcon className="h-5 w-5 text-gray-400"/>}
+                                type="password"
+                                placeholder="Investor (Read-Only) Password"
+                                value={addFormState.investorPassword}
+                                onChange={handleAddFormChange}
+                                isPassword
+                                passwordVisible={showAddFormInvestorPassword}
+                                onToggleVisibility={() => setShowAddFormInvestorPassword(!showAddFormInvestorPassword)}
+                            />
+
+                            <div className="relative">
+                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none"><ChartBarIcon className="h-5 w-5 text-gray-400" /></span>
+                                <select
+                                    name="tradingPlatform"
+                                    value={addFormState.tradingPlatform}
+                                    onChange={handleAddFormChange}
+                                    required
+                                    className={`w-full pl-10 pr-10 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition appearance-none ${!addFormState.tradingPlatform ? 'text-gray-400' : 'text-white'}`}
+                                >
+                                    <option value="" disabled>Select Trading Platform</option>
+                                    <option value="OctaFX on MT4">OctaFX on MT4</option>
+                                    <option value="OctaFX on MT5">OctaFX on MT5</option>
+                                </select>
+                                <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none"><ChevronDownIcon className="w-5 h-5 text-gray-400"/></div>
+                            </div>
+
+                            {addFormStatus === 'error' && <p className="text-red-500 text-sm text-center">{addFormError}</p>}
+                            
+                            <div className="flex justify-end gap-4 pt-4">
+                                <button type="button" onClick={() => setIsAddModalOpen(false)} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition">Cancel</button>
+                                <button type="submit" disabled={addFormStatus === 'submitting'} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition disabled:bg-blue-800 disabled:cursor-not-allowed">
+                                    {addFormStatus === 'submitting' ? 'Adding...' : 'Add Participant'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

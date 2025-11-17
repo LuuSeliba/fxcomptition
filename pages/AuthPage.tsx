@@ -14,59 +14,71 @@ const AuthPage: React.FC = () => {
   const [rulesConfirmed, setRulesConfirmed] = useState(false);
   const [error, setError] = useState('');
   
-  const [formStatus, setFormStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
+  const [formStatus, setFormStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [showInvestorPassword, setShowInvestorPassword] = useState(false);
 
-  const handleRegistrationSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleRegistrationSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     
+    if (!phone.startsWith('+')) {
+        setError('Phone number must include a country code (e.g., +27).');
+        return;
+    }
+
     if (!username || !fullName || !email || !phone || !accountNumber || !tradingPlatform || !investorPassword) {
         setError('Please fill in all fields.');
         return;
     }
-
     if (!rulesConfirmed) {
         setError('You must confirm you meet the competition requirements.');
         return;
     }
 
     setFormStatus('submitting');
-    const formData = new FormData(e.target as HTMLFormElement);
+    
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('fullName', fullName);
+    formData.append('email', email);
+    formData.append('phone', phone);
+    formData.append('accountNumber', accountNumber);
+    formData.append('investorPassword', investorPassword);
+    formData.append('tradingPlatform', tradingPlatform);
+    formData.append('rulesConfirmed', String(rulesConfirmed));
 
     try {
-        const response = await fetch('https://getform.io/f/amdynpyb', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'Accept': 'application/json',
-            },
-        });
+      const response = await fetch('https://getform.io/f/amdynpyb', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
 
-        if (response.ok) {
-            setFormStatus('success');
-        } else {
-            const data = await response.json();
-            setError(data.message || 'An error occurred during submission.');
-            setFormStatus('idle');
-        }
-    } catch (err) {
-        console.error('Submission error:', err);
-        setError('An unexpected error occurred. Please try again later.');
+      if (response.ok) {
+        setFormStatus('success');
+      } else {
+        setError('Registration failed. Please try again.');
         setFormStatus('idle');
+      }
+    } catch (err) {
+      console.error('Registration error:', err);
+      setError('An error occurred during submission. Please try again.');
+      setFormStatus('idle');
     }
   };
-
+  
   if (formStatus === 'success') {
     return (
         <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-md w-full space-y-8 bg-gray-800 p-10 rounded-xl shadow-2xl text-center">
                 <CheckCircleIcon className="w-16 h-16 text-green-400 mx-auto" />
                 <h2 className="mt-6 text-3xl font-extrabold text-white">
-                    Thank you for registering! ✅
+                    Registration Submitted!
                 </h2>
                 <p className="mt-2 text-gray-300">
-                    A confirmation email has been sent to your inbox with the next steps. Please check your email to complete your registration and access the competition details.
+                    Thank you for registering! You will receive an email confirmation shortly with the next steps and competition details.
                 </p>
                 <div className="mt-6">
                     <Link to="/" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
@@ -99,7 +111,7 @@ const AuthPage: React.FC = () => {
               <InputField name="username" icon={<UserIcon className="h-5 w-5 text-gray-400"/>} type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} />
               <InputField name="fullName" icon={<UserIcon className="h-5 w-5 text-gray-400"/>} type="text" placeholder="Full Name (private)" value={fullName} onChange={e => setFullName(e.target.value)} />
               <InputField name="email" icon={<MailIcon className="h-5 w-5 text-gray-400"/>} type="email" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
-              <InputField name="phone" icon={<PhoneIcon className="h-5 w-5 text-gray-400"/>} type="tel" placeholder="Phone Number (e.g. +27...)" value={phone} onChange={e => setPhone(e.target.value)} />
+              <InputField name="whatsappNumber" icon={<PhoneIcon className="h-5 w-5 text-gray-400"/>} type="tel" placeholder="Phone Number (e.g. +27...)" value={phone} onChange={e => setPhone(e.target.value)} />
               <InputField name="accountNumber" icon={<HashtagIcon className="h-5 w-5 text-gray-400"/>} type="text" placeholder="Trading Account Number" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} />
               <div>
                 <InputField 

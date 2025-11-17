@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import type { LeaderboardEntry, User } from '../types';
 
 interface CompetitionContextType {
@@ -8,47 +8,96 @@ interface CompetitionContextType {
   totalSpots: number;
   leaderboard: LeaderboardEntry[];
   updateParticipant: (username: string, updates: Partial<User>) => Promise<boolean>;
+  registerParticipant: (details: Omit<User, 'id' | 'paid' | 'verified' | 'isAdmin' | 'password' | 'gain'>) => Promise<boolean>;
 }
 
 const CompetitionContext = createContext<CompetitionContextType | undefined>(undefined);
 
-// --- MANUAL DATA MANAGEMENT ---
-// To manage participants and the leaderboard, edit the 'mockParticipants' array below.
-const mockParticipants: User[] = [
-  { id: 'tradermaster', username: 'tradermaster', fullName: 'Alex Doe', email: 'alex@example.com', phone: '+1234567890', tradingPlatform: 'OctaFX on MT5', accountNumber: '12345', investorPassword: 'pass', paid: true, verified: true, gain: 15.75 },
-  { id: 'forexking', username: 'forexking', fullName: 'Jane Smith', email: 'jane@example.com', phone: '+1234567891', tradingPlatform: 'OctaFX on MT4', accountNumber: '67890', investorPassword: 'pass', paid: true, verified: true, gain: 12.50 },
-  { id: 'pipsniper', username: 'pipsniper', fullName: 'Peter Jones', email: 'peter@example.com', phone: '+1234567892', tradingPlatform: 'OctaFX on MT5', accountNumber: '11121', investorPassword: 'pass', paid: true, verified: true, gain: 8.20 },
-  { id: 'chartwizard', username: 'chartwizard', fullName: 'Mary Johnson', email: 'mary@example.com', phone: '+1234567893', tradingPlatform: 'OctaFX on MT4', accountNumber: '31415', investorPassword: 'pass', paid: true, verified: false, gain: 5.10 },
-  { id: 'newtrader', username: 'newtrader', fullName: 'Sam Wilson', email: 'sam@example.com', phone: '+1234567894', tradingPlatform: 'OctaFX on MT5', accountNumber: '16180', investorPassword: 'pass', paid: false, verified: false, gain: 0.00 },
-];
-// ----------------------------
+const API_BASE_URL = '/api';
 
 export const CompetitionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [participants] = useState<User[]>(mockParticipants);
-  
-  const paidAndVerifiedParticipants = participants.filter(p => p.paid && p.verified);
-
-  const [leaderboard] = useState<LeaderboardEntry[]>(
-    paidAndVerifiedParticipants
-      .sort((a, b) => (b.gain ?? 0) - (a.gain ?? 0))
-      .map((p, index) => ({
-        id: p.id,
-        rank: index + 1,
-        name: p.username,
-        gain: p.gain ?? 0,
-      }))
-  );
-
-  const [spotsFilled] = useState(participants.filter(p => p.paid).length);
+  const [participants, setParticipants] = useState<User[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [spotsFilled, setSpotsFilled] = useState(0);
   const totalSpots = 20;
 
+  const fetchData = useCallback(async () => {
+      try {
+          const res = await fetch(`${API_BASE_URL}/participants`);
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+          const usersData: User[] = await res.json();
+          
+          setParticipants(usersData);
+
+          const leaderboardData = usersData
+              .filter(p => p.paid && p.verified)
+              .sort((a, b) => (b.gain ?? 0) - (a.gain ?? 0))
+              .map((p, index) => ({
+                  id: p.id,
+                  rank: index + 1,
+                  name: p.username,
+                  gain: p.gain ?? 0,
+              }));
+          setLeaderboard(leaderboardData);
+          
+          setSpotsFilled(usersData.filter(u => u.paid).length);
+
+      } catch (err) {
+          console.error("Failed to fetch competition data:", err);
+      }
+  }, []);
+
+  useEffect(() => {
+      fetchData();
+      const interval = setInterval(fetchData, 30000); // Keep polling for updates
+      return () => clearInterval(interval);
+  }, [fetchData]);
+
   const updateParticipant = async (username: string, updates: Partial<User>): Promise<boolean> => {
-    alert("Manual update mode is enabled. Please edit the data directly in the 'context/CompetitionContext.tsx' file.");
-    console.log(`Update attempt for ${username} with`, updates);
-    return false;
+      try {
+          const res = await fetch(`${API_BASE_URL}/participants/${username}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updates)
+          });
+          const data = await res.json();
+          if(res.ok && data.status === 'updated') {
+              await fetchData(); // Refresh data after update
+              return true;
+          }
+          alert(data.message || 'Update failed');
+          return false;
+      } catch(err) {
+          console.error('Update participant error:', err);
+          alert('Error connecting to server for update.');
+          return false;
+      }
   };
 
-  const value = { participants, spotsFilled, totalSpots, leaderboard, updateParticipant };
+  const registerParticipant = async (details: Omit<User, 'id' | 'paid' | 'verified' | 'isAdmin' | 'password' | 'gain'>): Promise<boolean> => {
+      try {
+          const res = await fetch(`${API_BASE_URL}/participants`, {
+            method: 'POST',
+            body: JSON.stringify(details),
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const data = await res.json();
+          if(res.ok && data.status === 'success') {
+            await fetchData(); // Refresh data after registration
+            return true;
+          } else {
+            // Use message from server if available
+            alert(data.message || 'Registration failed.');
+            return false;
+          }
+      } catch(err) {
+          console.error('Registration error:', err);
+          alert('Error connecting to server for registration.');
+          return false;
+      }
+  };
+  
+  const value = { participants, spotsFilled, totalSpots, leaderboard, updateParticipant, registerParticipant };
 
   return <CompetitionContext.Provider value={value}>{children}</CompetitionContext.Provider>;
 };
