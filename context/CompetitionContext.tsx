@@ -1,5 +1,4 @@
-
-import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import type { LeaderboardEntry, User } from '../types';
 
 interface CompetitionContextType {
@@ -13,7 +12,7 @@ interface CompetitionContextType {
 
 const CompetitionContext = createContext<CompetitionContextType | undefined>(undefined);
 
-const API_BASE_URL = '/api';
+const ENDPOINT = "https://script.google.com/macros/s/AKfycbynCoN5UVev1yhLn3EFaFbLeXdWsMNleOvVnhzd7k4/exec";
 
 export const CompetitionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [participants, setParticipants] = useState<User[]>([]);
@@ -21,12 +20,30 @@ export const CompetitionProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [spotsFilled, setSpotsFilled] = useState(0);
   const totalSpots = 20;
 
-  const fetchData = useCallback(async () => {
+  const fetchData = async () => {
       try {
-          const res = await fetch(`${API_BASE_URL}/participants`);
+          const res = await fetch(ENDPOINT);
           if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-          const usersData: User[] = await res.json();
+          const data = await res.json();
           
+          const usersData: User[] = data.map((d: any) => {
+              const rawGain = d['Gain%'];
+              const gain = !isNaN(parseFloat(rawGain)) ? parseFloat(rawGain) : 0;
+
+              return {
+                  id: d.username,
+                  username: d.username,
+                  fullName: d.fullName,
+                  email: d.email,
+                  phone: d.phone,
+                  tradingPlatform: d.broker,
+                  accountNumber: d.accountNumber,
+                  investorPassword: d.investorPassword,
+                  paid: String(d.Paid).toUpperCase() === 'TRUE',
+                  verified: String(d.Verified).toUpperCase() === 'TRUE',
+                  gain: gain,
+              };
+          });
           setParticipants(usersData);
 
           const leaderboardData = usersData
@@ -40,29 +57,30 @@ export const CompetitionProvider: React.FC<{ children: ReactNode }> = ({ childre
               }));
           setLeaderboard(leaderboardData);
           
+          // Derive spots filled directly from paid participants for accuracy
           setSpotsFilled(usersData.filter(u => u.paid).length);
 
       } catch (err) {
           console.error("Failed to fetch competition data:", err);
       }
-  }, []);
+  };
 
   useEffect(() => {
       fetchData();
-      const interval = setInterval(fetchData, 30000); // Keep polling for updates
+      const interval = setInterval(fetchData, 30000);
       return () => clearInterval(interval);
-  }, [fetchData]);
+  }, []);
 
-  const updateParticipant = async (username: string, updates: Partial<User>): Promise<boolean> => {
+  const updateParticipant = async (username: string, updates: Partial<User>) => {
       try {
-          const res = await fetch(`${API_BASE_URL}/participants/${username}`, {
-              method: 'PATCH',
+          const res = await fetch(ENDPOINT, {
+              method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(updates)
+              body: JSON.stringify({ action: 'update', username, ...updates })
           });
           const data = await res.json();
-          if(res.ok && data.status === 'updated') {
-              await fetchData(); // Refresh data after update
+          if(data.status === 'updated') {
+              await fetchData();
               return true;
           }
           alert(data.message || 'Update failed');
@@ -74,19 +92,26 @@ export const CompetitionProvider: React.FC<{ children: ReactNode }> = ({ childre
       }
   };
 
-  const registerParticipant = async (details: Omit<User, 'id' | 'paid' | 'verified' | 'isAdmin' | 'password' | 'gain'>): Promise<boolean> => {
+  const registerParticipant = async (details: Omit<User, 'id' | 'paid' | 'verified' | 'isAdmin' | 'password' | 'gain'>) => {
       try {
-          const res = await fetch(`${API_BASE_URL}/participants`, {
+          const payload: any = {
+              ...details,
+              broker: details.tradingPlatform,
+              accountBalance: 2000,
+              action: 'register'
+          };
+          delete payload.tradingPlatform;
+
+          const res = await fetch(ENDPOINT, {
             method: 'POST',
-            body: JSON.stringify(details),
+            body: JSON.stringify(payload),
             headers: { 'Content-Type': 'application/json' }
           });
           const data = await res.json();
-          if(res.ok && data.status === 'success') {
-            await fetchData(); // Refresh data after registration
+          if(data.status === 'success') {
+            await fetchData();
             return true;
           } else {
-            // Use message from server if available
             alert(data.message || 'Registration failed.');
             return false;
           }

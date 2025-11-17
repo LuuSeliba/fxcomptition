@@ -70,36 +70,14 @@ const AdminDashboardPage: React.FC = () => {
         setLeaderboardMessage('Saving...');
         try {
             const updatePromises = localLeaderboard
-                .map(entry => {
+                .filter(entry => {
                     const original = leaderboard.find(l => l.id === entry.id);
-                    if (!original) return null;
-
-                    const updates: Partial<User> = {};
-                    let hasChanges = false;
-                    
-                    if (original.name !== entry.name) {
-                        updates.username = entry.name;
-                        hasChanges = true;
-                    }
-
-                    if (original.gain !== entry.gain) {
-                        updates.gain = entry.gain;
-                        hasChanges = true;
-                    }
-
-                    if (hasChanges) {
-                        return updateParticipant(original.name, updates);
-                    }
-                    return null;
+                    return original && original.gain !== entry.gain;
                 })
-                .filter((p): p is Promise<boolean> => p !== null);
+                .map(entry => updateParticipant(entry.name, { gain: entry.gain }));
 
-            if (updatePromises.length > 0) {
-                await Promise.all(updatePromises);
-                setLeaderboardMessage('Leaderboard updated successfully!');
-            } else {
-                setLeaderboardMessage('No changes to save.');
-            }
+            await Promise.all(updatePromises);
+            setLeaderboardMessage('Leaderboard updated successfully!');
 
         } catch (error) {
             console.error("Error updating leaderboard: ", error);
@@ -207,7 +185,7 @@ const AdminDashboardPage: React.FC = () => {
                                         <tr key={entry.id || index} className="border-b border-gray-700">
                                             <td className="px-4 py-2 font-bold text-gray-400">{entry.rank || '...'}</td>
                                             <td className="px-4 py-2">
-                                                <input type="text" value={entry.name} onChange={(e) => handleLeaderboardChange(index, 'name', e.target.value)} className="w-full bg-gray-700 p-1 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                                                <input type="text" value={entry.name} readOnly className="w-full bg-gray-800 p-1 rounded-md border border-transparent"/>
                                             </td>
                                             <td className="px-4 py-2">
                                                 <input type="number" step="0.01" value={entry.gain} onChange={(e) => handleLeaderboardChange(index, 'gain', e.target.value)} className="w-24 bg-gray-700 p-1 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
@@ -225,7 +203,7 @@ const AdminDashboardPage: React.FC = () => {
                                     </span>
                                 )}
                                 <button onClick={handleLeaderboardSave} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
-                                    Save Changes
+                                    Save Gains
                                 </button>
                             </div>
                         </div>

@@ -1,9 +1,12 @@
 import React, { useState, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { useCompetition } from '../context/CompetitionContext';
 import { UserIcon, MailIcon, PhoneIcon, HashtagIcon, LockIcon, ChartBarIcon, ChevronDownIcon, CheckCircleIcon } from '../components/icons';
 import InputField from '../components/InputField';
 
 const AuthPage: React.FC = () => {
+  const { registerParticipant } = useCompetition();
+  
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
@@ -37,34 +40,20 @@ const AuthPage: React.FC = () => {
 
     setFormStatus('submitting');
     
-    const formData = new FormData();
-    formData.append('username', username);
-    formData.append('fullName', fullName);
-    formData.append('email', email);
-    formData.append('phone', phone);
-    formData.append('accountNumber', accountNumber);
-    formData.append('investorPassword', investorPassword);
-    formData.append('tradingPlatform', tradingPlatform);
-    formData.append('rulesConfirmed', String(rulesConfirmed));
+    const success = await registerParticipant({
+      username,
+      fullName,
+      email: email,
+      phone,
+      accountNumber,
+      investorPassword,
+      tradingPlatform,
+    });
 
-    try {
-      const response = await fetch('https://getform.io/f/amdynpyb', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        setFormStatus('success');
-      } else {
-        setError('Registration failed. Please try again.');
-        setFormStatus('idle');
-      }
-    } catch (err) {
-      console.error('Registration error:', err);
-      setError('An error occurred during submission. Please try again.');
+    if (success) {
+      setFormStatus('success');
+    } else {
+      setError('Registration failed. The username or email might already exist. Please try again.');
       setFormStatus('idle');
     }
   };
@@ -78,7 +67,7 @@ const AuthPage: React.FC = () => {
                     Registration Submitted!
                 </h2>
                 <p className="mt-2 text-gray-300">
-                    Thank you for registering! You will receive an email confirmation shortly with the next steps and competition details.
+                    Thank you for registering. Please check your email at <strong>{email}</strong> for payment instructions to finalize your spot.
                 </p>
                 <div className="mt-6">
                     <Link to="/" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
