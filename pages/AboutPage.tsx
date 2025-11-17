@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 const InfoCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -28,7 +29,7 @@ const AboutPage: React.FC = () => {
                         <p>A one-time fee to join the competition and enter the prize pool.</p>
                     </InfoCard>
                     <InfoCard title="Start Date">
-                        <p className="text-2xl font-bold">30 November 2025</p>
+                        <p className="text-2xl font-bold">29 November 2025</p>
                         <p>Mark your calendars! The competition kicks off on this date.</p>
                     </InfoCard>
                     <InfoCard title="Duration">

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { MenuIcon, XIcon, ChartBarIcon } from './icons';
 
 const Header: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const { currentUser } = useAuth();
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `px-3 py-2 rounded-md text-sm font-medium transition-colors duration-300 ${
@@ -44,16 +46,23 @@ const Header: React.FC = () => {
                   {link.text}
                 </NavLink>
               ))}
+              {currentUser?.isAdmin && (
+                 <NavLink to="/admin/dashboard" className={navLinkClass}>
+                    Dashboard
+                </NavLink>
+              )}
             </div>
           </div>
           <div className="hidden md:block">
             <div className="ml-4 flex items-center md:ml-6">
+              {!currentUser && (
                 <NavLink 
                     to="/auth" 
                     className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-md text-sm transition duration-300 ease-in-out transform hover:scale-105 shadow-md shadow-blue-500/30"
                 >
                     Register Now
                 </NavLink>
+              )}
             </div>
           </div>
           <div className="-mr-2 flex md:hidden">
@@ -79,9 +88,16 @@ const Header: React.FC = () => {
                 {link.text}
               </NavLink>
             ))}
-            <NavLink to="/auth" className={mobileNavLinkClass} onClick={() => setIsOpen(false)}>
-              Register Now
-            </NavLink>
+            {currentUser?.isAdmin && (
+                <NavLink to="/admin/dashboard" className={mobileNavLinkClass} onClick={() => setIsOpen(false)}>
+                    Dashboard
+                </NavLink>
+            )}
+             {!currentUser && (
+                <NavLink to="/auth" className={mobileNavLinkClass} onClick={() => setIsOpen(false)}>
+                  Register Now
+                </NavLink>
+              )}
           </div>
         </div>
       )}
